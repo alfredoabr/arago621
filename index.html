@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Aragó 621 — Gestor</title>
+
+  <!-- Configuración PWA Nativa para iPhone (iOS) y Android -->
+  <meta name="theme-color" content="#0f172a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Aragó 621">
+  <link id="apple-icon" rel="apple-touch-icon">
+  <link id="pwa-manifest" rel="manifest">
+
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --card-border: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+    html, body { background-color: var(--bg); color: var(--text); width: 100%; min-height: 100vh; overflow-x: hidden; }
+    .container { max-width: 860px; margin: 0 auto; padding: 16px 14px 40px; display: flex; flex-direction: column; gap: 14px; }
+
+    header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--card-border); padding-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    h1 { font-size: 1.2rem; font-weight: 800; color: #fff; letter-spacing: -0.02em; }
+    .status-pill { font-size: 0.74rem; padding: 5px 11px; border-radius: 999px; background: rgba(56, 189, 248, 0.15); color: var(--accent); border: 1px solid rgba(56, 189, 248, 0.3); font-weight: 600; cursor: pointer; transition: 0.2s; }
+    .status-pill.success { background: rgba(16, 185, 129, 0.15); color: var(--success); border-color: rgba(16, 185, 129, 0.35); }
+    .status-pill.syncing { background: rgba(245, 158, 11, 0.15); color: var(--warning); border-color: rgba(245, 158, 11, 0.35); }
+    .status-pill.error { background: rgba(239, 68, 68, 0.15); color: var(--danger); border-color: rgba(239, 68, 68, 0.35); }
+
+    /* Pestañas */
+    .nav-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    @media (max-width: 600px) { .nav-tabs { grid-template-columns: repeat(2, 1fr); } }
+    .tab-btn { background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-muted); padding: 10px 8px; border-radius: 9px; cursor: pointer; font-size: 0.82rem; font-weight: 700; text-align: center; transition: 0.15s; }
+    .tab-btn.active { background: var(--accent); color: #0f172a; border-color: var(--accent); }
+
+    /* Tarjetas */
+    .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius); padding: 15px; display: flex; flex-direction: column; gap: 12px; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .card-title { font-size: 0.95rem; font-weight: 700; color: var(--accent); }
+
+    /* Métricas */
+    .metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    @media (max-width: 640px) { .metrics-grid { grid-template-columns: 1fr; } }
+    .metric-box { background: rgba(15, 23, 42, 0.55); border: 1px solid var(--card-border); border-radius: 9px; padding: 12px; display: flex; justify-content: space-between; align-items: center; }
+    .metric-info { display: flex; flex-direction: column; }
+    .metric-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+    .metric-val { font-size: 1.25rem; font-weight: 800; color: #fff; margin-top: 2px; }
+    .metric-sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
+
+    /* Filas interactivas */
+    .resident-list { display: flex; flex-direction: column; gap: 8px; }
+    .resident-row { background: rgba(15, 23, 42, 0.65); border: 1px solid var(--card-border); border-radius: 9px; padding: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+    .resident-main { display: flex; flex-direction: column; gap: 2px; }
+    .resident-name { font-size: 0.94rem; font-weight: 700; color: #fff; }
+    .resident-detail { font-size: 0.75rem; color: var(--text-muted); }
+    .resident-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .amount-input { width: 95px; background: #0f172a; border: 1px solid var(--card-border); border-radius: 6px; padding: 7px 8px; color: var(--accent); font-weight: 700; font-size: 0.9rem; text-align: right; }
+
+    /* Botones de estado */
+    .pay-toggle { padding: 7px 12px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; cursor: pointer; border: none; transition: 0.15s; min-width: 100px; text-align: center; }
+    .pay-toggle.pending { background: rgba(245, 158, 11, 0.15); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.4); }
+    .pay-toggle.paid { background: rgba(16, 185, 129, 0.2); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.5); }
+
+    .badge { padding: 3px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 700; }
+    .badge.paid { background: rgba(16, 185, 129, 0.18); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.35); }
+    .badge.pending { background: rgba(245, 158, 11, 0.18); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.35); }
+
+    details { background: rgba(15, 23, 42, 0.45); border: 1px dashed var(--card-border); border-radius: 8px; padding: 10px 12px; }
+    summary { font-size: 0.8rem; color: var(--text-muted); cursor: pointer; font-weight: 600; user-select: none; }
+    .details-body { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 520px) { .details-body { grid-template-columns: 1fr; } }
+
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    label { font-size: 0.75rem; color: var(--text-muted); font-weight: 600; }
+    input, select { background: #0f172a; border: 1px solid var(--card-border); border-radius: 6px; padding: 9px 10px; color: #fff; font-size: 0.88rem; width: 100%; }
+
+    .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 560px) { .btn-row { grid-template-columns: 1fr; } }
+    .btn { background: var(--accent); color: #0f172a; border: none; padding: 12px 14px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.85rem; width: 100%; text-align: center; transition: 0.15s; }
+    .btn:hover { filter: brightness(1.08); }
+    .btn-success { background: var(--success); color: #052e16; }
+    .btn-warning { background: var(--warning); color: #451a03; }
+    .btn-secondary { background: rgba(255, 255, 255, 0.08); color: var(--text); border: 1px solid var(--card-border); }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: flex; flex-direction: column; gap: 14px; }
+    .copy-box { background: #0b1120; border: 1px solid var(--card-border); border-radius: 6px; padding: 10px; font-family: monospace; font-size: 0.78rem; color: #cbd5e1; white-space: pre-wrap; line-height: 1.4; }
+
+    /* Tablas responsivas para Historial */
+    .table-wrap { width: 100%; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; text-align: left; min-width: 520px; }
+    th { color: var(--text-muted); font-weight: 700; padding: 9px 8px; border-bottom: 1px solid var(--card-border); font-size: 0.74rem; text-transform: uppercase; }
+    td { padding: 10px 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="brand">
+      <h1>🏢 Aragó 621</h1>
+    </div>
+    <span class="status-pill" id="syncStatus" onclick="cargarDatosDeGoogle()">🔄 Sincronizar</span>
+  </header>
+
+  <div class="nav-tabs">
+    <button class="tab-btn active" onclick="switchTab('renta', event)">📅 1. Renta</button>
+    <button class="tab-btn" onclick="switchTab('pozo', event)">⚡ 2. Cuentas & Pozo</button>
+    <button class="tab-btn" onclick="switchTab('historial', event)">📜 3. Historial</button>
+    <button class="tab-btn" onclick="switchTab('fianzas', event)">🔐 4. Fianzas</button>
+  </div>
+
+  <!-- ==========================================
+       PESTAÑA 1: RENTA MENSUAL Y CIERRE DE MES
+       ========================================== -->
+  <div id="tab-renta" class="tab-content active">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Ciclo Mensual de Renta</span>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <select id="mesSelector" style="width: auto; padding: 6px 10px;" onchange="cambiarMes()"></select>
+        </div>
+      </div>
+
+      <div class="resident-list">
+        <!-- Francisca -->
+        <div class="resident-row">
+          <div class="resident-main">
+            <span class="resident-name">Francisca</span>
+            <span class="resident-detail">490,00 € Renta neta + 60,00 € Pozo Suministros</span>
+          </div>
+          <div class="resident-actions">
+            <input type="number" id="montoFran" class="amount-input" value="550.00" step="0.01" oninput="recalcularRenta()">
+            <button id="btnPaidFran" class="pay-toggle pending" onclick="togglePago('Fran')">⏳ Pendiente</button>
+          </div>
+        </div>
+
+        <!-- Catalina -->
+        <div class="resident-row">
+          <div class="resident-main">
+            <span class="resident-name">Catalina</span>
+            <span class="resident-detail">Base 450,00 € (-42,98 € remanente Fran)</span>
+          </div>
+          <div class="resident-actions">
+            <input type="number" id="montoCata" class="amount-input" value="407.02" step="0.01" oninput="recalcularRenta()">
+            <button id="btnPaidCata" class="pay-toggle pending" onclick="togglePago('Cata')">⏳ Pendiente</button>
+          </div>
+        </div>
+
+        <!-- Alfredo -->
+        <div class="resident-row">
+          <div class="resident-main">
+            <span class="resident-name">Alfredo (Tú)</span>
+            <span class="resident-detail">Base 512,43 € (-42,98 € remanente Fran)</span>
+          </div>
+          <div class="resident-actions">
+            <input type="number" id="montoAlfredo" class="amount-input" value="469.45" step="0.01" oninput="recalcularRenta()">
+            <button id="btnPaidAlfredo" class="pay-toggle pending" onclick="togglePago('Alfredo')">⏳ Pendiente</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Deducción oculta por defecto -->
+      <details>
+        <summary>⚙️ Opciones avanzadas: Deducción excepcional a Mariona</summary>
+        <div class="details-body">
+          <div class="form-group">
+            <label>Monto a descontar (€)</label>
+            <input type="number" id="deduccionMariona" value="0" step="0.01" oninput="recalcularRenta()">
+          </div>
+          <div class="form-group">
+            <label>Concepto (ej. arreglo / compra autorizada)</label>
+            <input type="text" id="motivoDeduccion" placeholder="Ninguno" oninput="recalcularRenta()">
+          </div>
+        </div>
+      </details>
+
+      <div class="metrics-grid">
+        <div class="metric-box">
+          <div class="metric-info">
+            <span class="metric-label">Recaudado en Cuenta</span>
+            <span class="metric-val" id="recaudadoHoyVal">0,00 €</span>
+            <span class="metric-sub" id="recaudadoMetaSub">de 1.426,47 € totales</span>
+          </div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-info">
+            <span class="metric-label">Transferencia a Mariona</span>
+            <span class="metric-val" id="totalMarionaDisplay">1.366,47 €</span>
+            <span class="metric-sub">Contrato oficial</span>
+          </div>
+          <button id="btnPaidMariona" class="pay-toggle pending" onclick="togglePago('Mariona')">⏳ Enviar</button>
+        </div>
+        <div class="metric-box">
+          <div class="metric-info">
+            <span class="metric-label">Retención al Pozo</span>
+            <span class="metric-val" style="color: var(--success);">+60,00 €</span>
+            <span class="metric-sub">Se suma al cerrar el mes</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn" onclick="guardarProgresoRenta()">💾 Guardar Progreso Parcial</button>
+        <button class="btn btn-success" onclick="cerrarMesYAvanzar()">✅ Cerrar Mes PAGADO y Abrir Siguiente (+60€ Pozo)</button>
+      </div>
+
+      <details>
+        <summary>💬 Ver mensaje de comprobante para Mariona</summary>
+        <div style="margin-top:8px; display:flex; flex-direction:column; gap:8px;">
+          <div class="copy-box" id="txtMariona"></div>
+          <button class="btn btn-secondary" onclick="copiarTexto('txtMariona')">📋 Copiar Mensaje Mariona</button>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       PESTAÑA 2: SUMINISTROS Y POZO EN 2 ETAPAS
+       ========================================== -->
+  <div id="tab-pozo" class="tab-content">
+    <!-- Saldo del Pozo -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Fondo Acumulado de Francisca (Pozo Suministros)</span>
+        <span class="badge paid">Sincronizado con Sheets</span>
+      </div>
+      <div class="resident-row">
+        <div class="resident-main">
+          <span class="resident-name">Saldo líquido disponible en tu cuenta</span>
+          <span class="resident-detail">Cubre primero las facturas de Luz, Agua y Gas.</span>
+        </div>
+        <div class="resident-actions">
+          <input type="number" id="saldoPozoInput" class="amount-input" value="60.00" step="0.01" oninput="calcularLiquidacion()">
+        </div>
+      </div>
+    </div>
+
+    <!-- ETAPA 1: Registrar Factura y Dar Aviso -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Etapa 1: Calcular Nueva Cuenta y Dar Aviso</span>
+        <span class="badge pending">Paso 1 de 2</span>
+      </div>
+
+      <div class="details-body">
+        <div class="form-group">
+          <label>Tipo de Cuenta / Regla de Reparto</label>
+          <select id="tipoFactura" onchange="calcularLiquidacion()">
+            <option value="Luz">⚡ Luz (Octopus) — Usa Pozo + 50/50</option>
+            <option value="Agua">💧 Agua (Aigües BCN) — Usa Pozo + 50/50</option>
+            <option value="Gas">🔥 Gas (Octopus) — Usa Pozo + 50/50</option>
+            <option value="Luz + Gas">⚡🔥 Luz + Gas (Octopus) — Usa Pozo + 50/50</option>
+            <option value="Limpieza / Común">🧹 Limpieza / Gasto Común — 33,3% entre los 3</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Importe Total (€)</label>
+          <input type="number" id="importeFactura" placeholder="Ej: 84.50" step="0.01" oninput="calcularLiquidacion()">
+        </div>
+      </div>
+
+      <details>
+        <summary>⚙️ Prorrateo o aporte externo (ej. días de Alex)</summary>
+        <div class="details-body">
+          <div class="form-group">
+            <label>Monto cubierto por tercero (€)</label>
+            <input type="number" id="aporteExtra" value="0" step="0.01" oninput="calcularLiquidacion()">
+          </div>
+          <div class="form-group">
+            <label>Nota / Detalle</label>
+            <input type="text" id="notaFactura" placeholder="Opcional" oninput="calcularLiquidacion()">
+          </div>
+        </div>
+      </details>
+
+      <div class="resident-list">
+        <div class="resident-row">
+          <span>Cubierto por Pozo de Francisca:</span>
+          <strong id="cubiertoPozoDisplay" style="color: var(--success);">0,00 €</strong>
+        </div>
+        <div class="resident-row">
+          <span>Restante a repartir:</span>
+          <strong id="deficitDisplay">0,00 €</strong>
+        </div>
+        <div class="resident-row" id="filaCuotaFran" style="display:none;">
+          <span><strong>Paga Francisca (33,3%):</strong></span>
+          <strong id="cuotaFranDisplay" style="color: var(--warning);">0,00 €</strong>
+        </div>
+        <div class="resident-row">
+          <span id="labelCuotaCata"><strong>Paga Catalina (50%):</strong></span>
+          <strong id="cuotaCataDisplay" style="color: var(--warning);">0,00 €</strong>
+        </div>
+        <div class="resident-row">
+          <span id="labelCuotaAlfredo"><strong>Pagas Tú (50%):</strong></span>
+          <strong id="cuotaAlfredoDisplay" style="color: var(--warning);">0,00 €</strong>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Mensaje de aviso listo para WhatsApp:</label>
+        <div class="copy-box" id="txtCata">Ingresa el monto de la factura para generar el aviso.</div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="copiarTexto('txtCata')">📋 Copiar Aviso de WhatsApp</button>
+        <button class="btn btn-warning" onclick="registrarFacturaPendiente()">⏳ 1. Registrar Cuenta como PENDIENTE</button>
+      </div>
+    </div>
+
+    <!-- ETAPA 2: Confirmar Pagos de Facturas Pendientes -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Etapa 2: Cuentas Pendientes de Cobro / Pago</span>
+        <span class="badge paid">Paso 2 de 2</span>
+      </div>
+      <div id="listaFacturasPendientes" class="resident-list">
+        <div style="font-size:0.82rem; color:var(--text-muted);">No hay cuentas pendientes de cobro en este momento.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       PESTAÑA 3: HISTORIAL VIVO (MARZO 2026 - HOY)
+       ========================================== -->
+  <div id="tab-historial" class="tab-content">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Historial de Suministros y Cuentas (Google Sheets)</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Concepto</th>
+              <th>Total</th>
+              <th>Pozo Fran</th>
+              <th>Cata</th>
+              <th>Alfredo</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody id="tablaHistorialSuministros"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Historial de Rentas Mensuales (Marzo 2026 – Hoy)</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Mes</th>
+              <th>Alfredo</th>
+              <th>Cata / Pareja</th>
+              <th>Francisca</th>
+              <th>Desc.</th>
+              <th>A Mariona</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody id="tablaHistorialRentas"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Auditoría de Movimientos del Pozo (Francisca)</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Mes</th>
+              <th>Inicial</th>
+              <th>Aporte</th>
+              <th>Usado</th>
+              <th>Saldo Final</th>
+              <th>Detalle</th>
+            </tr>
+          </thead>
+          <tbody id="tablaHistorialPozo"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       PESTAÑA 4: BÓVEDA DE FIANZAS
+       ========================================== -->
+  <div id="tab-fianzas" class="tab-content">
+    <div class="card">
+      <div class="card-title">Fianza Oficial Depositada (Mariona / INCASÒL)</div>
+      <div class="metrics-grid">
+        <div class="metric-box">
+          <div class="metric-info">
+            <span class="metric-label">Total Oficial</span>
+            <span class="metric-val">1.064,43 €</span>
+            <span class="metric-sub">100% Cerrada en Mayo 2026</span>
+          </div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-info">
+            <span class="metric-label">Alfredo (37,50%)</span>
+            <span class="metric-val">399,16 €</span>
+            <span class="metric-sub">Titular</span>
+          </div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-info">
+            <span class="metric-label">Alex y Cata (62,50%)</span>
+            <span class="metric-val">665,27 €</span>
+            <span class="metric-sub">332,63 € c/u</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Custodia Fianza Francisca (550,00 €) — Matriz Retorno Mes 4</div>
+      <div class="resident-list">
+        <div class="resident-row">
+          <div class="resident-main">
+            <span class="resident-name">Alex Fuentes (Chile)</span>
+            <span class="resident-detail">Recibió su mitad al viajar. Debe transferirla de vuelta al regresar.</span>
+          </div>
+          <div class="resident-actions">
+            <strong style="color: var(--accent);">332,63 €</strong>
+            <button id="btnFianzaAlex" class="pay-toggle pending" onclick="togglePago('FianzaAlex')">En Chile</button>
+          </div>
+        </div>
+        <div class="resident-row">
+          <div class="resident-main">
+            <span class="resident-name">Alfredo (Tu custodia en banco)</span>
+            <span class="resident-detail">50% del remanente líquido custodiado en tu cuenta.</span>
+          </div>
+          <div class="resident-actions">
+            <strong style="color: var(--accent);">117,63 €</strong>
+            <button id="btnFianzaAlfredo" class="pay-toggle paid" onclick="togglePago('FianzaAlfredo')">En Custodia</button>
+          </div>
+        </div>
+        <div class="resident-row">
+          <div class="resident-main">
+            <span class="resident-name">Catalina (Su custodia)</span>
+            <span class="resident-detail">50% remanente menos 17,89 € de ajuste de su fianza individual.</span>
+          </div>
+          <div class="resident-actions">
+            <strong style="color: var(--accent);">99,74 €</strong>
+            <button id="btnFianzaCata" class="pay-toggle paid" onclick="togglePago('FianzaCata')">En Custodia</button>
+          </div>
+        </div>
+      </div>
+      <div style="font-size: 0.78rem; color: var(--text-muted);">
+        Conciliación exacta de devolución a Francisca: <strong>332,63 € + 117,63 € + 99,74 € = 550,00 €</strong>.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // URL de tu Google Apps Script verificado
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwBrdJkL3Ws9XNNTZEgrU_9zrThZjuUrJJ0DjsLl2I2293GVNT8beK3arTo5BIkEJ2Y/exec";
+
+  const LISTA_MESES = [
+    "Noviembre 2026", "Diciembre 2026", "Enero 2027", "Febrero 2027",
+    "Marzo 2027", "Abril 2027", "Mayo 2027", "Junio 2027"
+  ];
+
+  let appState = {
+    mesActual: "Noviembre 2026",
+    saldoPozo: 60.00,
+    meses: {},
+    fianzas: { FianzaAlex: false, FianzaAlfredo: true, FianzaCata: true }
+  };
+
+  let dbSnapshot = {
+    rentas: [],
+    suministros: [],
+    pozo: []
+  };
+
+  function asegurarMesEnEstado(nombreMes) {
+    if (!appState.meses[nombreMes]) {
+      appState.meses[nombreMes] = {
+        Fran: false, Cata: false, Alfredo: false, Mariona: false,
+        mFran: 550.00, mCata: 407.02, mAlfredo: 469.45, ded: 0, motivo: ""
+      };
+    }
+  }
+
+  LISTA_MESES.forEach(asegurarMesEnEstado);
+
+  // Configurar Icono y Manifiesto PWA para iPhone y Android sin archivos externos
+  function configurarPWA() {
+    const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="110" fill="#0f172a"/><rect x="40" y="40" width="432" height="432" rx="90" fill="#1e293b" stroke="#38bdf8" stroke-width="16"/><text x="256" y="295" font-family="Arial,sans-serif" font-size="175" font-weight="bold" fill="#38bdf8" text-anchor="middle">621</text></svg>`;
+    const iconDataUrl = "data:image/svg+xml;base64," + btoa(svgIcon);
+    document.getElementById("apple-icon").href = iconDataUrl;
+
+    const manifest = {
+      name: "Piso Aragó 621 — Gestor",
+      short_name: "Aragó 621",
+      start_url: window.location.href,
+      display: "standalone",
+      background_color: "#0f172a",
+      theme_color: "#0f172a",
+      icons: [{ src: iconDataUrl, sizes: "512x512", type: "image/svg+xml", purpose: "any maskable" }]
+    };
+    const manifestBlob = new Blob([JSON.stringify(manifest)], { type: "application/json" });
+    document.getElementById("pwa-manifest").href = URL.createObjectURL(manifestBlob);
+  }
+
+  // Motor de comunicación universal (JSONP + Fetch Fallback)
+  function llamarAPI(payloadObj) {
+    return new Promise((resolve, reject) => {
+      const cbName = "arago_cb_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
+      const script = document.createElement("script");
+      const timer = setTimeout(() => {
+        limpiar();
+        reject(new Error("Tiempo de espera agotado"));
+      }, 18000);
+
+      function limpiar() {
+        clearTimeout(timer);
+        delete window[cbName];
+        if (script.parentNode) script.parentNode.removeChild(script);
+      }
+
+      window[cbName] = function(respuesta) {
+        limpiar();
+        resolve(respuesta);
+      };
+
+      script.onerror = function() {
+        limpiar();
+        reject(new Error("No se pudo conectar con Google Apps Script"));
+      };
+
+      let url = SCRIPT_URL + "?callback=" + cbName + "&_=" + Date.now();
+      if (payloadObj) {
+        url += "&payload=" + encodeURIComponent(JSON.stringify(payloadObj));
+      }
+      script.src = url;
+      document.body.appendChild(script);
+    });
+  }
+
+  window.onload = function() {
+    configurarPWA();
+    inicializarSelectorMeses();
+    const local = localStorage.getItem("arago621_pwa_v1");
+    if (local) {
+      try {
+        const parsed = JSON.parse(local);
+        appState = Object.assign(appState, parsed);
+        LISTA_MESES.forEach(asegurarMesEnEstado);
+      } catch (e) {}
+    }
+    cargarVistaMes();
+    calcularLiquidacion();
+    cargarDatosDeGoogle();
+  };
+
+  function inicializarSelectorMeses() {
+    const sel = document.getElementById("mesSelector");
+    sel.innerHTML = "";
+    LISTA_MESES.forEach(m => {
+      const opt = document.createElement("option");
+      opt.value = m;
+      opt.innerText = m;
+      sel.appendChild(opt);
+    });
+  }
+
+  function setStatus(text, type) {
+    const el = document.getElementById("syncStatus");
+    el.innerText = text;
+    el.className = "status-pill " + (type || "");
+  }
+
+  function cargarDatosDeGoogle() {
+    setStatus("Sincronizando...", "syncing");
+    llamarAPI(null)
+      .then(data => {
+        if (data && data.status === "success") {
+          aplicarSnapshotServidor(data);
+          setStatus("✅ Sincronizado", "success");
+        } else {
+          setStatus("⚠️ Error Script", "error");
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        setStatus("⚠️ Modo Local", "error");
+      });
+  }
+
+  function aplicarSnapshotServidor(data) {
+    if (data.state) {
+      appState = Object.assign(appState, data.state);
+      LISTA_MESES.forEach(asegurarMesEnEstado);
+    }
+    if (data.saldoPozo !== undefined && data.saldoPozo !== null) {
+      appState.saldoPozo = parseFloat(data.saldoPozo);
+    }
+    dbSnapshot.rentas = data.rentas || [];
+    dbSnapshot.suministros = data.suministros || [];
+    dbSnapshot.pozo = data.pozo || [];
+
+    localStorage.setItem("arago621_pwa_v1", JSON.stringify(appState));
+    cargarVistaMes();
+    calcularLiquidacion();
+    renderizarFacturasPendientes();
+    renderizarTablasHistorial();
+  }
+
+  function guardarEstadoLocal() {
+    const m = appState.meses[appState.mesActual];
+    m.mFran = parseFloat(document.getElementById("montoFran").value) || 0;
+    m.mCata = parseFloat(document.getElementById("montoCata").value) || 0;
+    m.mAlfredo = parseFloat(document.getElementById("montoAlfredo").value) || 0;
+    m.ded = parseFloat(document.getElementById("deduccionMariona").value) || 0;
+    m.motivo = document.getElementById("motivoDeduccion").value || "";
+    appState.saldoPozo = parseFloat(document.getElementById("saldoPozoInput").value) || 0;
+    localStorage.setItem("arago621_pwa_v1", JSON.stringify(appState));
+  }
+
+  function switchTab(tabId, ev) {
+    document.querySelectorAll(".tab-content").forEach(el => el.classList.remove("active"));
+    document.querySelectorAll(".tab-btn").forEach(el => el.classList.remove("active"));
+    document.getElementById("tab-" + tabId).classList.add("active");
+    ev.target.classList.add("active");
+  }
+
+  function cambiarMes() {
+    appState.mesActual = document.getElementById("mesSelector").value;
+    asegurarMesEnEstado(appState.mesActual);
+    cargarVistaMes();
+  }
+
+  function cargarVistaMes() {
+    asegurarMesEnEstado(appState.mesActual);
+    document.getElementById("mesSelector").value = appState.mesActual;
+    const m = appState.meses[appState.mesActual];
+
+    document.getElementById("montoFran").value = Number(m.mFran).toFixed(2);
+    document.getElementById("montoCata").value = Number(m.mCata).toFixed(2);
+    document.getElementById("montoAlfredo").value = Number(m.mAlfredo).toFixed(2);
+    document.getElementById("deduccionMariona").value = m.ded || 0;
+    document.getElementById("motivoDeduccion").value = m.motivo || "";
+    document.getElementById("saldoPozoInput").value = Number(appState.saldoPozo).toFixed(2);
+
+    actualizarBoton("btnPaidFran", m.Fran, "✅ Pagado", "⏳ Pendiente");
+    actualizarBoton("btnPaidCata", m.Cata, "✅ Pagado", "⏳ Pendiente");
+    actualizarBoton("btnPaidAlfredo", m.Alfredo, "✅ Pagado", "⏳ Pendiente");
+    actualizarBoton("btnPaidMariona", m.Mariona, "✅ Enviado", "⏳ Enviar");
+
+    actualizarBoton("btnFianzaAlex", appState.fianzas.FianzaAlex, "✅ Retornado", "En Chile");
+    actualizarBoton("btnFianzaAlfredo", appState.fianzas.FianzaAlfredo, "En Custodia", "⏳ Pendiente");
+    actualizarBoton("btnFianzaCata", appState.fianzas.FianzaCata, "En Custodia", "⏳ Pendiente");
+
+    recalcularRenta();
+  }
+
+  function actualizarBoton(id, estado, txtTrue, txtFalse) {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.className = "pay-toggle " + (estado ? "paid" : "pending");
+    btn.innerText = estado ? txtTrue : txtFalse;
+  }
+
+  function togglePago(quien) {
+    if (quien.startsWith("Fianza")) {
+      appState.fianzas[quien] = !appState.fianzas[quien];
+      cargarVistaMes();
+      guardarEstadoLocal();
+      return;
+    }
+    const m = appState.meses[appState.mesActual];
+    m[quien] = !m[quien];
+    cargarVistaMes();
+    guardarEstadoLocal();
+  }
+
+  function recalcularRenta() {
+    guardarEstadoLocal();
+    const m = appState.meses[appState.mesActual];
+    let recaudado = 0;
+    if (m.Fran) recaudado += m.mFran;
+    if (m.Cata) recaudado += m.mCata;
+    if (m.Alfredo) recaudado += m.mAlfredo;
+
+    const metaTotal = m.mFran + m.mCata + m.mAlfredo;
+    const pagarMariona = 1366.47 - m.ded;
+
+    document.getElementById("recaudadoHoyVal").innerText = recaudado.toFixed(2).replace(".", ",") + " €";
+    document.getElementById("recaudadoMetaSub").innerText = "de " + metaTotal.toFixed(2).replace(".", ",") + " € totales";
+    document.getElementById("totalMarionaDisplay").innerText = pagarMariona.toFixed(2).replace(".", ",") + " €";
+
+    const notaDed = m.ded > 0 ? ` (aplicando descuento de ${m.ded.toFixed(2)}€ por ${m.motivo})` : "";
+    document.getElementById("txtMariona").innerText = `Bona tarda Mariona, te adjunto el comprobante de la transferencia de la renta de ${appState.mesActual} por ${pagarMariona.toFixed(2)}€${notaDed}. Un saludo!`;
+  }
+
+  function guardarProgresoRenta() {
+    guardarEstadoLocal();
+    const m = appState.meses[appState.mesActual];
+    setStatus("Guardando...", "syncing");
+
+    llamarAPI({
+      action: "guardar_renta",
+      mes: appState.mesActual,
+      pagoAlfredo: m.mAlfredo,
+      pagoCatalina: m.mCata,
+      totalFran: m.mFran,
+      descuento: m.ded,
+      totalMariona: 1366.47 - m.ded,
+      estado: (m.Fran && m.Cata && m.Alfredo && m.Mariona) ? "Pagado" : "En curso",
+      appState: appState
+    }).then(data => {
+      aplicarSnapshotServidor(data);
+      setStatus("✅ Guardado", "success");
+      alert("Progreso de " + appState.mesActual + " guardado en Google Sheets.");
+    }).catch(err => {
+      setStatus("❌ Error", "error");
+      alert("Error al guardar: " + err.message);
+    });
+  }
+
+  function cerrarMesYAvanzar() {
+    const mesCerrado = appState.mesActual;
+    const idx = LISTA_MESES.indexOf(mesCerrado);
+    const siguienteMes = (idx !== -1 && idx + 1 < LISTA_MESES.length) ? LISTA_MESES[idx + 1] : null;
+
+    if (!confirm(`¿Confirmas cerrar ${mesCerrado} como PAGADO?\n\nEsto hará lo siguiente en Google Sheets:\n1. Marcará ${mesCerrado} como Pagado.\n2. Abrirá ${siguienteMes || 'el nuevo ciclo'} y sumará +60,00 € al Pozo de Francisca.`)) {
+      return;
+    }
+
+    const m = appState.meses[mesCerrado];
+    m.Fran = true; m.Cata = true; m.Alfredo = true; m.Mariona = true;
+    appState.saldoPozo += 60;
+
+    if (siguienteMes) {
+      asegurarMesEnEstado(siguienteMes);
+      appState.mesActual = siguienteMes;
+    }
+
+    guardarEstadoLocal();
+    setStatus("Cerrando mes...", "syncing");
+
+    llamarAPI({
+      action: "cerrar_mes",
+      mes: mesCerrado,
+      siguienteMes: siguienteMes,
+      pagoAlfredo: m.mAlfredo,
+      pagoCatalina: m.mCata,
+      totalFran: m.mFran,
+      descuento: m.ded,
+      totalMariona: 1366.47 - m.ded,
+      appState: appState
+    }).then(data => {
+      aplicarSnapshotServidor(data);
+      setStatus("✅ Mes Cerrado", "success");
+      alert(`¡${mesCerrado} cerrado como PAGADO! Se abrió ${siguienteMes} y se sumaron +60,00 € al Pozo de Francisca.`);
+    }).catch(err => {
+      setStatus("❌ Error", "error");
+      alert("Error al cerrar mes: " + err.message);
+    });
+  }
+
+  // Calculadora de Suministros y Limpieza
+  function calcularLiquidacion() {
+    guardarEstadoLocal();
+    const tipo = document.getElementById("tipoFactura").value;
+    const imp = parseFloat(document.getElementById("importeFactura").value) || 0;
+    const ext = parseFloat(document.getElementById("aporteExtra").value) || 0;
+    const pozo = appState.saldoPozo;
+    const base = Math.max(0, imp - ext);
+
+    let cubierto = 0;
+    let deficit = 0;
+    let cuotaCata = 0;
+    let cuotaAlfredo = 0;
+    let cuotaFran = 0;
+
+    if (tipo === "Limpieza / Común") {
+      document.getElementById("filaCuotaFran").style.display = "flex";
+      document.getElementById("labelCuotaCata").innerHTML = "<strong>Paga Catalina (33,3%):</strong>";
+      document.getElementById("labelCuotaAlfredo").innerHTML = "<strong>Pagas Tú (33,3%):</strong>";
+      cubierto = 0;
+      deficit = base;
+      cuotaFran = base / 3;
+      cuotaCata = base / 3;
+      cuotaAlfredo = base / 3;
+    } else {
+      document.getElementById("filaCuotaFran").style.display = "none";
+      document.getElementById("labelCuotaCata").innerHTML = "<strong>Paga Catalina (50%):</strong>";
+      document.getElementById("labelCuotaAlfredo").innerHTML = "<strong>Pagas Tú (50%):</strong>";
+      cubierto = Math.min(pozo, base);
+      deficit = Math.max(0, base - pozo);
+      cuotaCata = deficit / 2;
+      cuotaAlfredo = deficit / 2;
+    }
+
+    document.getElementById("cubiertoPozoDisplay").innerText = cubierto.toFixed(2).replace(".", ",") + " €";
+    document.getElementById("deficitDisplay").innerText = deficit.toFixed(2).replace(".", ",") + " €";
+    document.getElementById("cuotaFranDisplay").innerText = cuotaFran.toFixed(2).replace(".", ",") + " €";
+    document.getElementById("cuotaCataDisplay").innerText = cuotaCata.toFixed(2).replace(".", ",") + " €";
+    document.getElementById("cuotaAlfredoDisplay").innerText = cuotaAlfredo.toFixed(2).replace(".", ",") + " €";
+
+    if (tipo === "Limpieza / Común") {
+      document.getElementById("txtCata").innerText =
+`Hola chicas! Compré/pagué ${tipo} por ${imp.toFixed(2)}€.
+Dividido entre los 3 (33,3%) nos toca ${cuotaCata.toFixed(2)}€ a cada uno (Fran: ${cuotaFran.toFixed(2)}€ | Cata: ${cuotaCata.toFixed(2)}€ | Alfredo: ${cuotaAlfredo.toFixed(2)}€). Me lo pasan cuando puedan! 🙌`;
+    } else {
+      const txtExtra = ext > 0 ? ` (descontando ${ext.toFixed(2)}€ de aporte externo)` : "";
+      document.getElementById("txtCata").innerText =
+`Hola Cata! Llegó la factura de ${tipo} por ${imp.toFixed(2)}€${txtExtra}.
+El pozo de Fran cubrió ${cubierto.toFixed(2)}€ y quedó una diferencia de ${deficit.toFixed(2)}€.
+Nos corresponde ${cuotaCata.toFixed(2)}€ a cada uno. Me lo pasas cuando puedas! 🙌`;
+    }
+  }
+
+  function registrarFacturaPendiente() {
+    const imp = parseFloat(document.getElementById("importeFactura").value) || 0;
+    if (imp <= 0) {
+      alert("Ingresa el importe de la factura primero.");
+      return;
+    }
+    const tipo = document.getElementById("tipoFactura").value;
+    const cubierto = parseFloat(document.getElementById("cubiertoPozoDisplay").innerText.replace(",", "."));
+    const deficit = parseFloat(document.getElementById("deficitDisplay").innerText.replace(",", "."));
+    const cuotaCata = parseFloat(document.getElementById("cuotaCataDisplay").innerText.replace(",", "."));
+    const cuotaAlfredo = parseFloat(document.getElementById("cuotaAlfredoDisplay").innerText.replace(",", "."));
+
+    appState.saldoPozo = Math.max(0, appState.saldoPozo - cubierto);
+    document.getElementById("saldoPozoInput").value = appState.saldoPozo.toFixed(2);
+    guardarEstadoLocal();
+
+    let empresa = "Octopus Energy";
+    if (tipo.includes("Agua")) empresa = "Aigües de Barcelona";
+    if (tipo.includes("Limpieza")) empresa = "Gasto Común Piso";
+
+    setStatus("Registrando...", "syncing");
+    llamarAPI({
+      action: "registrar_factura",
+      fecha: new Date().toLocaleDateString("es-ES"),
+      tipo: tipo,
+      empresa: empresa,
+      importeTotal: imp,
+      aporteExtra: parseFloat(document.getElementById("aporteExtra").value) || 0,
+      cubiertoPozo: cubierto,
+      restante: deficit,
+      cuotaCata: cuotaCata,
+      cuotaAlfredo: cuotaAlfredo,
+      mes: appState.mesActual,
+      appState: appState
+    }).then(data => {
+      document.getElementById("importeFactura").value = "";
+      aplicarSnapshotServidor(data);
+      setStatus("✅ Cuenta Registrada", "success");
+      alert("Factura registrada como PENDIENTE y descontada del Pozo. Cuando Cata te transfiera, márcala como Pagada en la lista inferior.");
+    }).catch(err => {
+      setStatus("❌ Error", "error");
+      alert("Error al registrar factura: " + err.message);
+    });
+  }
+
+  function confirmarFacturaPagada(rowNumber, concepto, total) {
+    if (!confirm(`¿Confirmas que la cuenta de ${concepto} (${total}) ya fue cobrada y pagada por completo?`)) return;
+    setStatus("Actualizando...", "syncing");
+    llamarAPI({
+      action: "marcar_factura_pagada",
+      rowNumber: rowNumber,
+      appState: appState
+    }).then(data => {
+      aplicarSnapshotServidor(data);
+      setStatus("✅ Factura Pagada", "success");
+    }).catch(err => {
+      setStatus("❌ Error", "error");
+      alert("Error al actualizar factura: " + err.message);
+    });
+  }
+
+  function renderizarFacturasPendientes() {
+    const cont = document.getElementById("listaFacturasPendientes");
+    const pendientes = (dbSnapshot.suministros || []).filter(f => String(f.estado).toLowerCase().includes("pendiente"));
+
+    if (pendientes.length === 0) {
+      cont.innerHTML = `<div style="font-size:0.82rem; color:var(--text-muted);">No hay cuentas pendientes de cobro. Todas las facturas están al día.</div>`;
+      return;
+    }
+
+    cont.innerHTML = "";
+    pendientes.forEach(f => {
+      const row = document.createElement("div");
+      row.className = "resident-row";
+      row.innerHTML = `
+        <div class="resident-main">
+          <span class="resident-name">${f.concepto} — Total: ${f.total}</span>
+          <span class="resident-detail">Fecha: ${f.fecha} | Pozo cubrió: ${f.pozo} | Cata debe: <strong>${f.cata}</strong> | Tú: ${f.alfredo}</span>
+        </div>
+        <div class="resident-actions">
+          <button class="pay-toggle paid" onclick="confirmarFacturaPagada(${f.rowNumber}, '${f.concepto}', '${f.total}')">✅ 2. Marcar PAGADA</button>
+        </div>
+      `;
+      cont.appendChild(row);
+    });
+  }
+
+  function renderizarTablasHistorial() {
+    // 1. Suministros
+    const tbSum = document.getElementById("tablaHistorialSuministros");
+    tbSum.innerHTML = "";
+    (dbSnapshot.suministros || []).slice().reverse().forEach(s => {
+      const isPaid = String(s.estado).toLowerCase().includes("pagado");
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${s.fecha}</td>
+        <td><strong>${s.concepto}</strong></td>
+        <td>${s.total}</td>
+        <td style="color:var(--success);">${s.pozo}</td>
+        <td>${s.cata}</td>
+        <td>${s.alfredo}</td>
+        <td><span class="badge ${isPaid ? 'paid' : 'pending'}">${s.estado}</span></td>
+      `;
+      tbSum.appendChild(tr);
+    });
+
+    // 2. Rentas
+    const tbRen = document.getElementById("tablaHistorialRentas");
+    tbRen.innerHTML = "";
+    (dbSnapshot.rentas || []).slice().reverse().forEach(r => {
+      const isPaid = String(r.estado).toLowerCase().includes("pagado");
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><strong>${r.mes}</strong></td>
+        <td>${r.alfredo}</td>
+        <td>${r.catalina}</td>
+        <td>${r.franTotal}</td>
+        <td>${r.descuento}</td>
+        <td><strong>${r.totalMariona}</strong></td>
+        <td><span class="badge ${isPaid ? 'paid' : 'pending'}">${r.estado}</span></td>
+      `;
+      tbRen.appendChild(tr);
+    });
+
+    // 3. Pozo
+    const tbPozo = document.getElementById("tablaHistorialPozo");
+    tbPozo.innerHTML = "";
+    (dbSnapshot.pozo || []).slice().reverse().forEach(p => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><strong>${p.mes}</strong></td>
+        <td>${p.saldoInicial}</td>
+        <td style="color:var(--success);">${p.aporte}</td>
+        <td style="color:var(--warning);">${p.gasto}</td>
+        <td><strong style="color:var(--accent);">${p.saldoFinal}</strong></td>
+        <td>${p.notas || ""}</td>
+      `;
+      tbPozo.appendChild(tr);
+    });
+  }
+
+  function copiarTexto(id) {
+    const text = document.getElementById(id).innerText;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => alert("Copiado al portapapeles."));
+    } else {
+      const input = document.createElement("textarea");
+      input.value = text;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      document.body.removeChild(input);
+      alert("Copiado al portapapeles.");
+    }
+  }
+</script>
+</body>
+</html>
