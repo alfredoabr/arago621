@@ -161,6 +161,14 @@
   body.busy [data-act]:not([data-act=tab]):not([data-act=copiar]):not([data-act=sync]) { pointer-events: none; opacity: .55; }
   .vence { display: block; font-size: 12px; color: var(--muted); margin-top: 4px; font-weight: 600; }
   .vence.hoy { color: var(--warn); }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .split > div { background: var(--sunk); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 2px; }
+  .split .l { font-size: 12px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+  .split .v { font-size: 22px; font-weight: 800; }
+  .split .s { font-size: 12px; font-weight: 700; }
+  .split .s.ok { color: var(--ok); } .split .s.warn { color: var(--warn); } .split .s.mut { color: var(--dim); }
+  .transfer { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); padding: 10px 2px 0; }
+  .hm .tots { display: flex; flex-direction: column; align-items: flex-end; font-size: 12px; color: var(--muted); line-height: 1.35; }
   .edit { background: var(--sunk); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 </style>
 </head>
@@ -481,9 +489,18 @@ function renderMes() {
   if (!pagado(a.marionaPago)) items.push({ t: "alquiler " + a.nombre, v: a.mariona });
   pendC.forEach(c => items.push({ t: `${c.servicio.toLowerCase()} (${(c.desde || c.hasta) ? `${fechaCorta(c.desde)}–${fechaCorta(c.hasta)}` : c.fecha})`, v: c.importe }));
   const tot = r2(items.reduce((s, x) => s + x.v, 0));
-  const totCiclo = r2(a.mariona + delCiclo.reduce((s, c) => s + c.importe, 0));
-  if (tot > 0) mf += `<div class="total"><span>A transferir${mesSel === S.mesActual && S.vence ? " antes del " + S.vence.slice(0, 5) : ""}</span><span class="amt num">${eur(tot)}</span></div>`;
-  if (tot < totCiclo) mf += `<div class="total" style="${tot > 0 ? "border:0;padding-top:4px;font-weight:600;color:var(--muted)" : ""}"><span>Transferido este mes</span><span class="amt num" style="${tot > 0 ? "font-size:15px" : ""}">${eur(r2(totCiclo - tot))}</span></div>`;
+  // Totales separados: renta (fija) y cuentas del mes
+  const rentaOk = pagado(a.marionaPago);
+  const totCtas = r2(delCiclo.reduce((s, c) => s + c.importe, 0));
+  const ctasPend = r2(pendC.reduce((s, c) => s + c.importe, 0));
+  const nC = delCiclo.length;
+  mf += `<div class="split">
+    <div><span class="l">Renta</span><span class="v num">${eur(a.mariona)}</span>
+      <span class="s ${rentaOk ? "ok" : "warn"}">${rentaOk ? "✓ Pagada " + fechaCorta(a.marionaPago) : "Pendiente"}</span></div>
+    <div><span class="l">Cuentas</span><span class="v num">${eur(totCtas)}</span>
+      <span class="s ${!nC ? "mut" : ctasPend ? "warn" : "ok"}">${!nC ? "Ninguna aún" : ctasPend ? `${eur(ctasPend)} pendiente` : `✓ ${nC} ${nC === 1 ? "pagada" : "pagadas"}`}</span></div>
+  </div>`;
+  if (tot > 0) mf += `<div class="transfer"><span>Transferencia total${mesSel === S.mesActual && S.vence ? " antes del " + S.vence.slice(0, 5) : ""}</span><span class="num">${eur(tot)}</span></div>`;
   if (mesSel === S.mesActual && !delCiclo.length) mf += `<p class="hint" style="margin-top:8px">Las cuentas que lleguen antes del ${S.vence ? S.vence.slice(0, 5) : "día 5"} se suman a este pago.</p>`;
   $("marionaFilas").innerHTML = mf;
   if (items.length) {
@@ -578,9 +595,14 @@ function renderHistorial() {
   const A = S.alquiler, C = S.cuentas;
   const sum = (l, f) => r2(l.reduce((s, x) => s + f(x), 0));
   const kv = (k, v) => `<div class="kv"><span>${k}</span><span class="num">${v}</span></div>`;
-  $("resumen").innerHTML =
-    kv("Pagado a Mariona (alquiler)", eur(sum(A.filter(a => pagado(a.marionaPago)), a => a.mariona))) +
-    kv("Cuentas registradas", eur(sum(C, c => c.importe))) +
+  const Apag = A.filter(a => pagado(a.marionaPago));
+  const Cmar = C.filter(c => aplica(c.marionaPago));
+  const cPend = sum(Cmar.filter(c => !pagado(c.marionaPago)), c => c.importe);
+  $("resumen").innerHTML = `<div class="split" style="margin-top:0">
+      <div><span class="l">Renta pagada</span><span class="v num">${eur(sum(Apag, a => a.mariona))}</span><span class="s mut">${Apag.length} ${Apag.length === 1 ? "mes" : "meses"}</span></div>
+      <div><span class="l">Cuentas pagadas</span><span class="v num">${eur(sum(Cmar.filter(c => pagado(c.marionaPago)), c => c.importe))}</span>
+        <span class="s ${cPend ? "warn" : "mut"}">${cPend ? eur(cPend) + " pendiente" : "luz · gas · agua"}</span></div>
+    </div><div class="sep" style="margin:12px 0 6px"></div>` +
     kv("Cubierto por el pozo", eur(sum(C, c => c.pozo))) +
     kv("Tu parte en cuentas", eur(sum(C, c => c.alfredo))) +
     kv("Parte de Cata en cuentas", eur(sum(C, c => c.cata))) +
@@ -590,7 +612,8 @@ function renderHistorial() {
   $("histMeses").innerHTML = A.slice().reverse().map(a => {
     const cs = C.filter(c => aplica(c.marionaPago) ? cicloCuenta(c) === a.mes : mesDeFecha(c.fecha) === a.mes);
     const est = pagado(a.marionaPago) ? '<span class="badge ok">Pagado</span>' : '<span class="badge warn">En curso</span>';
-    let b = kv("A Mariona", eur(a.mariona) + (a.marionaPago && a.marionaPago !== "✓" ? " · " + a.marionaPago : ""));
+    const ctas = sum(cs.filter(c => aplica(c.marionaPago)), c => c.importe);
+    let b = kv("<b>Renta a Mariona</b>", `<b>${eur(a.mariona)}</b>` + (a.marionaPago && a.marionaPago !== "✓" ? " · " + a.marionaPago : ""));
     b += kv("Tú", eur(a.alfredo));
     b += kv("Cata", eur(a.cata) + (pagado(a.cataPago) ? " ✓" : " · pendiente"));
     if (a.alex > 0) b += kv("Alex", eur(a.alex));
@@ -600,11 +623,12 @@ function renderHistorial() {
     if (cs.length) {
       b += `<div class="sep"></div>`;
       cs.forEach(c => b += kv(`${ICON[c.servicio] || "🧾"} ${esc(c.servicio)} <span class="hint">${esc(periodo(c))}</span>`, eur(c.importe)));
-      b += kv("<b>Cuentas pagadas este mes</b>", `<b>${eur(sum(cs, c => c.importe))}</b>`);
-      b += kv("<b>Total a Mariona</b>", `<b>${eur(a.mariona + sum(cs.filter(c => aplica(c.marionaPago)), c => c.importe))}</b>`);
+      b += kv("<b>Cuentas a Mariona</b>", `<b>${eur(ctas)}</b>`);
+      const com = sum(cs.filter(c => !aplica(c.marionaPago)), c => c.importe);
+      if (com) b += kv("<b>Gastos comunes</b>", `<b>${eur(com)}</b>`);
     }
     if (a.nota) b += `<div class="hint" style="margin-top:6px">${esc(a.nota)}</div>`;
-    return `<details class="hm"><summary><b>${esc(a.nombre)}</b><span style="display:flex;gap:8px;align-items:center"><span class="num hint">${eur(a.mariona + sum(cs, c => c.importe))}</span>${est}</span></summary><div class="body">${b}</div></details>`;
+    return `<details class="hm"><summary><b>${esc(a.nombre)}</b><span style="display:flex;gap:8px;align-items:center"><span class="tots num"><span>Renta ${eur(a.mariona)}</span><span>Cuentas ${eur(ctas)}</span></span>${est}</span></summary><div class="body">${b}</div></details>`;
   }).join("");
 
   $("actividad").innerHTML = (S.registro || []).map(r => `<li><div class="d">${esc(r.fecha)} · ${esc(r.origen)}</div><b>${esc(r.accion)}</b> — ${esc(r.detalle)}</li>`).join("") || '<li class="empty">Sin actividad.</li>';
