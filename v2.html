@@ -9,8 +9,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Aragó 621">
-<link id="apple-icon" rel="apple-touch-icon">
-<link id="pwa-manifest" rel="manifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="manifest" href="manifest.webmanifest">
 <style>
   :root {
     --bg: #0f172a; --card: #1e293b; --line: #334155; --sunk: #0b1222;
@@ -809,17 +810,7 @@ function guardarPin() {
   enviar(null).then(() => { $("pin").classList.remove("on"); $("pinInput").value = ""; toast("Conectado ✓"); }).catch(() => {});
 }
 
-/* ================= PWA ================= */
-function configurarPWA() {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="110" fill="#0f172a"/><rect x="40" y="40" width="432" height="432" rx="90" fill="#1e293b" stroke="#38bdf8" stroke-width="16"/><text x="256" y="295" font-family="Arial,sans-serif" font-size="175" font-weight="bold" fill="#38bdf8" text-anchor="middle">621</text></svg>`;
-  const icon = "data:image/svg+xml;base64," + btoa(svg);
-  $("apple-icon").href = icon;
-  const manifest = { name: "Piso Aragó 621", short_name: "Aragó 621", start_url: location.href, display: "standalone", background_color: "#0f172a", theme_color: "#0f172a", icons: [{ src: icon, sizes: "512x512", type: "image/svg+xml", purpose: "any maskable" }] };
-  $("pwa-manifest").href = URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: "application/json" }));
-}
-
 /* ================= ARRANQUE ================= */
-configurarPWA();
 $("fFecha").value = hoyISO();
 try { const c = localStorage.getItem(LS_CACHE); if (c) aplicar(JSON.parse(c), true); } catch (e) {}
 if (localStorage.getItem(LS_PIN)) enviar(null).catch(() => {}); else mostrarPin();
