@@ -158,6 +158,10 @@
   #toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
   #toast.err { border-color: rgba(239,68,68,.5); color: #fecaca; }
   .empty { color: var(--dim); font-size: 13px; padding: 6px 0; }
+  body.busy [data-act]:not([data-act=tab]):not([data-act=copiar]):not([data-act=sync]) { pointer-events: none; opacity: .55; }
+  .vence { display: block; font-size: 12px; color: var(--muted); margin-top: 4px; font-weight: 600; }
+  .vence.hoy { color: var(--warn); }
+  .edit { background: var(--sunk); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 </style>
 </head>
 <body>
@@ -316,6 +320,15 @@ function mesDeFecha(dd) { const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(dd || "")
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 function nombreMes(k) { const [y, m] = k.split("-"); return MESES[+m - 1] + " " + y; }
 function mesSiguiente(k) { let [y, m] = k.split("-").map(Number); m++; if (m > 12) { m = 1; y++; } return `${y}-${String(m).padStart(2, "0")}`; }
+// Mes en que una cuenta se paga a Mariona: el del pago si ya se pagó; si no, el ciclo vigente
+function cicloCuenta(c) {
+  if (pagado(c.marionaPago)) return mesDeFecha(c.marionaPago) || mesDeFecha(c.fecha);
+  return S.mesActual;
+}
+function diasHasta(dd) {
+  const a = ddmmToISO(S.hoy), b = ddmmToISO(dd); if (!a || !b) return null;
+  return Math.round((new Date(b + "T12:00") - new Date(a + "T12:00")) / 864e5);
+}
 function periodo(c) { return (c.desde || c.hasta) ? `${fechaCorta(c.desde) || "?"} → ${c.hasta || "?"}` : `Factura ${c.fecha || "—"}`; }
 
 function toast(t, err) { const el = $("toast"); el.textContent = t; el.className = "on" + (err ? " err" : ""); clearTimeout(toast.t); toast.t = setTimeout(() => el.className = "", 2600); }
@@ -348,13 +361,14 @@ function enviar(payload) {             // peticiones en fila, nunca en paralelo
   return p;
 }
 async function ejecutar(payload) {
-  setSync("busy");
+  setSync("busy"); document.body.classList.add("busy");
   try {
     const d = await api(payload);
     if (d && d.status === "success") { aplicar(d); setSync("ok"); return d; }
     if (d && d.code === "PIN") { localStorage.removeItem(LS_PIN); mostrarPin("PIN incorrecto"); throw new Error("PIN incorrecto"); }
     throw new Error((d && d.message) || "Error del servidor");
   } catch (e) { setSync("err"); toast(e.message, true); throw e; }
+  finally { document.body.classList.remove("busy"); }
 }
 
 function aplicar(d, desdeCache) {
@@ -410,13 +424,19 @@ function renderMes() {
   $("mesNombre").textContent = a ? a.nombre : nombreMes(mesSel);
   document.querySelector('[data-act="mes-prev"]').disabled = i <= 0;
   document.querySelector('[data-act="mes-next"]').disabled = i >= meses.length - 1;
-  $("mesEstado").innerHTML = a ? (pagado(a.marionaPago) ? '<span class="badge ok">Pagado</span>' : '<span class="badge warn">En curso</span>') : "";
+  let est = a ? (pagado(a.marionaPago) ? '<span class="badge ok">Pagado</span>' : '<span class="badge warn">En curso</span>') : "";
+  if (a && mesSel === S.mesActual && S.vence && !pagado(a.marionaPago)) {
+    const d = diasHasta(S.vence);
+    const txt = d == null ? "" : d > 1 ? `Pago a Mariona vence el ${S.vence.slice(0, 5)} · faltan ${d} días` : d === 1 ? "Vence mañana" : d === 0 ? "Vence hoy" : `Vencido hace ${-d} ${-d === 1 ? "día" : "días"}`;
+    est += `<span class="vence ${d != null && d <= 1 ? "hoy" : ""}">${txt}</span>`;
+  }
+  $("mesEstado").innerHTML = est;
 
   // Pendiente ahora (global)
   const D = deudas();
   const bloque = (lab, tot, items) => !tot ? `<div class="z"><span class="l">${lab}</span><span class="v num zero">${eur(0)} ✓</span></div>` : `<div><div class="l">${lab}</div><div class="v num ${tot ? "" : "zero"}">${eur(tot)}</div>
      ${items.length ? `<ul>${items.map(x => `<li>${esc(x.t)} · <span class="num">${eur(x.v)}</span></li>`).join("")}</ul>` : ""}</div>`;
-  $("deudas").innerHTML = bloque("Cata te debe", D.tCata, D.cata) + bloque("Fran te debe", D.tFran, D.fran) + bloque("Le debes a Mariona", D.tMariona, D.mariona);
+  $("deudas").innerHTML = bloque("Cata te debe", D.tCata, D.cata) + bloque("Fran te debe", D.tFran, D.fran) + bloque(`Le debes a Mariona${S.vence ? " · vence " + S.vence.slice(0, 5) : ""}`, D.tMariona, D.mariona);
   if (D.cata.length) {
     const txt = `Hola Cata! Te dejo lo pendiente:\n${D.cata.map(x => `• ${x.t}: ${eur(x.v)}`).join("\n")}\nTotal: ${eur(D.tCata)}. Me lo pasas cuando puedas 🙌`;
     $("msgCataWrap").innerHTML = `<details><summary class="more">💬 Mensaje para Cata</summary><div class="stack" style="margin-top:8px"><div class="msg">${esc(txt)}</div><button class="btn ghost" data-act="copiar" data-txt="${esc(txt)}">Copiar mensaje</button></div></details>`;
@@ -449,10 +469,11 @@ function renderMes() {
     <button class="btn ghost" data-act="ajustar">Guardar ajustes</button>`;
 
   // Pago a Mariona: alquiler de este mes + cuentas pendientes de reembolso
-  const pendC = S.cuentas.filter(c => aplica(c.marionaPago) && !pagado(c.marionaPago));
+  const delCiclo = S.cuentas.filter(c => aplica(c.marionaPago) && cicloCuenta(c) === mesSel);
+  const pendC = delCiclo.filter(c => !pagado(c.marionaPago));
   let mf = `<div class="row"><div class="who"><b>🏠 Alquiler</b><span>${a.descuento > 0 ? `contrato − ${eur(a.descuento)} (${esc(a.motivo)})` : "contrato"}</span></div>
      <div class="end"><span class="amt num">${eur(a.mariona)}</span>${tg(a.marionaPago, `data-act="renta" data-quien="mariona"`, "Pendiente", "")}</div></div>`;
-  pendC.forEach(c => {
+  delCiclo.forEach(c => {
     mf += `<div class="row"><div class="who"><b>${ICON[c.servicio] || "🧾"} ${esc(c.servicio)}</b><span>${esc(periodo(c))}</span></div>
       <div class="end"><span class="amt num">${eur(c.importe)}</span>${tg(c.marionaPago, `data-act="cuenta" data-id="${c.id}" data-quien="mariona"`, "Pendiente", "")}</div></div>`;
   });
@@ -460,7 +481,10 @@ function renderMes() {
   if (!pagado(a.marionaPago)) items.push({ t: "alquiler " + a.nombre, v: a.mariona });
   pendC.forEach(c => items.push({ t: `${c.servicio.toLowerCase()} (${(c.desde || c.hasta) ? `${fechaCorta(c.desde)}–${fechaCorta(c.hasta)}` : c.fecha})`, v: c.importe }));
   const tot = r2(items.reduce((s, x) => s + x.v, 0));
-  mf += `<div class="total"><span>A transferir ahora</span><span class="amt num">${eur(tot)}</span></div>`;
+  const totCiclo = r2(a.mariona + delCiclo.reduce((s, c) => s + c.importe, 0));
+  if (tot > 0) mf += `<div class="total"><span>A transferir${mesSel === S.mesActual && S.vence ? " antes del " + S.vence.slice(0, 5) : ""}</span><span class="amt num">${eur(tot)}</span></div>`;
+  if (tot < totCiclo) mf += `<div class="total" style="${tot > 0 ? "border:0;padding-top:4px;font-weight:600;color:var(--muted)" : ""}"><span>Transferido este mes</span><span class="amt num" style="${tot > 0 ? "font-size:15px" : ""}">${eur(r2(totCiclo - tot))}</span></div>`;
+  if (mesSel === S.mesActual && !delCiclo.length) mf += `<p class="hint" style="margin-top:8px">Las cuentas que lleguen antes del ${S.vence ? S.vence.slice(0, 5) : "día 5"} se suman a este pago.</p>`;
   $("marionaFilas").innerHTML = mf;
   if (items.length) {
     const txt = `Bona tarda Mariona! Te hago la transferencia: ${items.map(x => `${x.t} ${eur(x.v)}`).join(" + ")}${items.length > 1 ? ` = ${eur(tot)}` : ""}. Un saludo!`;
@@ -504,9 +528,28 @@ function billHTML(c) {
     <div class="acts">${acts}
       <details style="margin-left:auto"><summary class="more">${c.id} ⋯</summary>
         <div class="fold">${c.nota ? `<span>${esc(c.nota)}</span>` : ""}<span>Factura recibida: ${esc(c.fecha || "—")}</span>
+        ${editHTML(c)}
         <button class="btn danger" style="padding:9px" data-act="borrar" data-id="${c.id}">Borrar ${c.id}</button></div>
       </details>
     </div></div>`;
+}
+
+function editHTML(c) {
+  const k = c.id, opts = SERVICIOS.concat(SERVICIOS.includes(c.servicio) ? [] : [c.servicio]);
+  const n = x => String(x).replace(".", ",");
+  return `<div class="edit">
+    <b style="color:var(--text);font-size:13px">Editar ${k}</b>
+    <div><label>Servicio</label><select id="e-${k}-svc">${opts.map(o => `<option${o === c.servicio ? " selected" : ""}>${esc(o)}</option>`).join("")}</select></div>
+    <div class="grid2">
+      <div><label>Desde</label><input type="date" id="e-${k}-desde" value="${ddmmToISO(c.desde)}"></div>
+      <div><label>Hasta</label><input type="date" id="e-${k}-hasta" value="${ddmmToISO(c.hasta)}"></div>
+      <div><label>Importe (€)</label><input class="num" inputmode="decimal" id="e-${k}-imp" value="${n(c.importe)}"></div>
+      <div><label>Llegó la factura</label><input type="date" id="e-${k}-fecha" value="${ddmmToISO(c.fecha)}"></div>
+      <div><label>Aporte externo (€)</label><input class="num" inputmode="decimal" id="e-${k}-ap" value="${n(c.aporte)}"></div>
+      <div><label>Nota</label><input id="e-${k}-nota" value="${esc(c.nota)}"></div>
+    </div>
+    <button class="btn ghost" style="padding:10px" data-act="guardar-cuenta" data-id="${k}">Guardar cambios</button>
+  </div>`;
 }
 
 function autoDesde() {
@@ -545,7 +588,7 @@ function renderHistorial() {
     `<div class="sep"></div>` + kv("Desde", A.length ? A[0].nombre : "—");
 
   $("histMeses").innerHTML = A.slice().reverse().map(a => {
-    const cs = C.filter(c => mesDeFecha(c.fecha) === a.mes);
+    const cs = C.filter(c => aplica(c.marionaPago) ? cicloCuenta(c) === a.mes : mesDeFecha(c.fecha) === a.mes);
     const est = pagado(a.marionaPago) ? '<span class="badge ok">Pagado</span>' : '<span class="badge warn">En curso</span>';
     let b = kv("A Mariona", eur(a.mariona) + (a.marionaPago && a.marionaPago !== "✓" ? " · " + a.marionaPago : ""));
     b += kv("Tú", eur(a.alfredo));
@@ -557,7 +600,8 @@ function renderHistorial() {
     if (cs.length) {
       b += `<div class="sep"></div>`;
       cs.forEach(c => b += kv(`${ICON[c.servicio] || "🧾"} ${esc(c.servicio)} <span class="hint">${esc(periodo(c))}</span>`, eur(c.importe)));
-      b += kv("<b>Cuentas del mes</b>", `<b>${eur(sum(cs, c => c.importe))}</b>`);
+      b += kv("<b>Cuentas pagadas este mes</b>", `<b>${eur(sum(cs, c => c.importe))}</b>`);
+      b += kv("<b>Total a Mariona</b>", `<b>${eur(a.mariona + sum(cs.filter(c => aplica(c.marionaPago)), c => c.importe))}</b>`);
     }
     if (a.nota) b += `<div class="hint" style="margin-top:6px">${esc(a.nota)}</div>`;
     return `<details class="hm"><summary><b>${esc(a.nombre)}</b><span style="display:flex;gap:8px;align-items:center"><span class="num hint">${eur(a.mariona + sum(cs, c => c.importe))}</span>${est}</span></summary><div class="body">${b}</div></details>`;
@@ -639,6 +683,31 @@ document.addEventListener("click", async ev => {
     const valor = el.dataset.valor === "1";
     if (!valor && !confirm("¿Desmarcar este pago?")) return;
     return ocupado(() => enviar({ action: "cuenta_marcar", id: el.dataset.id, quien: el.dataset.quien, valor }).then(() => toast(valor ? "Marcado ✓" : "Desmarcado")));
+  }
+  if (act === "guardar-cuenta") {
+    const c = S.cuentas.find(x => x.id === el.dataset.id); if (!c) return;
+    const g = f => $(`e-${c.id}-${f}`);
+    const cambios = {};
+    if (g("svc").value !== c.servicio) cambios.servicio = g("svc").value;
+    if (g("desde").value !== ddmmToISO(c.desde)) cambios.desde = g("desde").value;
+    if (g("hasta").value !== ddmmToISO(c.hasta)) cambios.hasta = g("hasta").value;
+    if (g("fecha").value !== ddmmToISO(c.fecha)) cambios.fechaFactura = g("fecha").value;
+    const imp = r2(parseNum(g("imp").value)), ap = r2(parseNum(g("ap").value));
+    if (imp !== r2(c.importe)) cambios.importe = imp;
+    if (ap !== r2(c.aporte)) cambios.aporte = ap;
+    if (g("nota").value !== c.nota) cambios.nota = g("nota").value;
+    if (!Object.keys(cambios).length) { toast("No hay cambios"); return; }
+    if (cambios.importe !== undefined && !(imp > 0)) { toast("Importe inválido", true); return; }
+    const d = cambios.desde ?? ddmmToISO(c.desde), h = cambios.hasta ?? ddmmToISO(c.hasta);
+    if (d && h && d > h) { toast("El periodo está al revés", true); return; }
+    if (cambios.importe !== undefined || cambios.aporte !== undefined || cambios.servicio !== undefined) {
+      const r = calcularReparto(cambios.servicio || c.servicio, imp, ap, S.pozo + c.pozo);
+      let aviso = `Nuevo reparto de ${c.id}: pozo ${eur(r.pozo)}, Cata ${eur(r.cata)}, tú ${eur(r.alfredo)}${r.fran ? ", Fran " + eur(r.fran) : ""}.`;
+      if (pagado(c.cataPago) && r.cata !== c.cata) aviso += `\n\nOjo: Cata ya pagó ${eur(c.cata)}; con el cambio le corresponden ${eur(r.cata)} (diferencia ${eur(r2(r.cata - c.cata))}).`;
+      if (pagado(c.marionaPago) && imp !== c.importe) aviso += `\n\nOjo: esta cuenta ya figura como reembolsada a Mariona por ${eur(c.importe)}.`;
+      if (!confirm(aviso + "\n\n¿Guardar?")) return;
+    }
+    return ocupado(() => enviar({ action: "cuenta_editar", id: c.id, cambios }).then(() => toast("Cuenta actualizada ✓")));
   }
   if (act === "borrar") {
     if (!confirm(`¿Borrar la cuenta ${el.dataset.id}? Quedará anotado en el Registro y el pozo que usó se libera.`)) return;
